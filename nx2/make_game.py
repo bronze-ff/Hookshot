@@ -414,13 +414,17 @@ HEADS = ".hookshot_romfs_heads"   # (the extraction's damaged .zs list, under th
 
 
 def read_stamp(path):
-    """An unpack's stamp, which holds the .nup's name: UTF-8, or the Windows code page a builder before #2246 wrote it in"""
+    """An unpack's stamp, which holds the .nup's name: UTF-8, or the Windows code page a builder before #2246 wrote it in.
+    Decoded exactly or not at all: a replaced letter would let another .nup's name match, and its unpack be skipped. A
+    stamp that cannot be read is "", which no unpack's stamp equals"""
     with open(path, "rb") as f:
         raw = f.read()
-    try:
-        return raw.decode("utf-8")
-    except UnicodeDecodeError:
-        return raw.decode(locale.getpreferredencoding(False), "replace")
+    for encoding in ("utf-8", locale.getencoding()):   # (getencoding: the code page also in Python's UTF-8 mode)
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError:
+            pass
+    return ""
 
 
 def write_stamp(path, stamp):
