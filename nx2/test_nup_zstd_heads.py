@@ -93,6 +93,19 @@ class Heads(unittest.TestCase):
             opened.assert_called_once()
             self.assertEqual(Path(romfs, "Model", "damaged.bntx.zs").read_bytes(), WHOLE)
 
+    def test_a_stamp_keeps_a_name_outside_the_code_page(self):
+        """#2246: "Zelda™⁚ Ocarina.nup" stopped the build with a UnicodeEncodeError where Windows' code page is cp1252"""
+        with tempfile.TemporaryDirectory() as d, mock.patch("locale.getpreferredencoding", return_value="cp1252"):
+            stamp = "unpacked by this builder: Zelda™⁚ Ocarina.nup 123\n"
+            path = os.path.join(d, ".hookshot_romfs")
+            make_game.write_stamp(path, stamp)
+            self.assertEqual(Path(path).read_bytes(), stamp.encode("utf-8"))
+            self.assertEqual(make_game.read_stamp(path), stamp)
+            # (a stamp an earlier builder wrote in the code page still reads as it was: no second unpack)
+            old = "unpacked by this builder: Zelda™ Ocarina.nup 123\r\n"
+            Path(path).write_bytes(old.encode("cp1252"))
+            self.assertEqual(make_game.read_stamp(path), old)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -31,6 +31,7 @@ import filecmp
 import hashlib
 import importlib.util
 import json
+import locale
 import ntpath
 import os
 import queue
@@ -412,6 +413,21 @@ def file_progress(verb, clock=time.monotonic):
 HEADS = ".hookshot_romfs_heads"   # (the extraction's damaged .zs list, under the stamp of the unpack that made it)
 
 
+def read_stamp(path):
+    """An unpack's stamp, which holds the .nup's name: UTF-8, or the Windows code page a builder before #2246 wrote it in"""
+    with open(path, "rb") as f:
+        raw = f.read()
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return raw.decode(locale.getpreferredencoding(False), "replace")
+
+
+def write_stamp(path, stamp):
+    with open(path, "w", encoding="utf-8", newline="") as f:   # (not the code page: a name outside it stopped the build, #2246)
+        f.write(stamp)
+
+
 def keep_heads(out, game, stamp):
     """nup.py's list of the romfs .zs files that do not start as zstd (its HEADS_NAME, beside the extracted romfs), kept in the
     game folder under this unpack's stamp for stand_in_damaged_files: the ~100,000 files are then not opened again"""
@@ -436,12 +452,9 @@ def stand_in_damaged_files(out, romfs):
     if not os.path.isfile(good) or not os.path.isdir(romfs):
         return
     check_cache_paths(out, (good, checked, romfs))
-    with open(good) as f:
-        stamp = f.read()
-    if os.path.isfile(checked):
-        with open(checked) as f:
-            if f.read() == stamp:
-                return
+    stamp = read_stamp(good)
+    if os.path.isfile(checked) and read_stamp(checked) == stamp:
+        return
     import nup
     heads = os.path.join(out, HEADS)
     known = None
@@ -458,8 +471,7 @@ def stand_in_damaged_files(out, romfs):
         done = nup.stand_in_damaged(romfs, file_progress("checked"))
     else:   # (found while the .nup was extracted: no file opened again)
         done = nup.stand_in_damaged(romfs, damaged=[os.path.normpath(os.path.join(romfs, rel)) for rel in known])
-    with open(checked, "w") as f:
-        f.write(stamp)
+    write_stamp(checked, stamp)
     with contextlib.suppress(FileNotFoundError):
         os.remove(heads)
     if not done:
@@ -1610,8 +1622,7 @@ def main(a=None):
         stamp = "unpacked by this builder: %s %d" % (os.path.basename(a.nup), st.st_size)
         same = False
         if os.path.exists(good) and os.path.isdir(romfs) and os.path.isdir(kept):
-            with open(good) as f:
-                same = f.read().strip() == stamp
+            same = read_stamp(good).strip() == stamp
         if same:
             print("the game was read from this .nup before: reading it again is skipped", flush=True)
             shutil.copytree(kept, exefs)
@@ -1643,8 +1654,7 @@ def main(a=None):
             shutil.rmtree(game, ignore_errors=True)
             shutil.rmtree(kept, ignore_errors=True)
             shutil.copytree(exefs, kept)
-            with open(good, "w") as f:
-                f.write(stamp + chr(10))
+            write_stamp(good, stamp + chr(10))
         check_modules(exefs)
         # (also when the .nup was read before: a folder built from a 23.3 GB dump by an earlier builder gets them too)
         stand_in_damaged_files(out, romfs)
