@@ -445,12 +445,20 @@ static void pads_poll(void) {
                unused axis on a stick, a second virtual pad) turned the camera or walked Link in circles on its own, with the
                player's pad at rest (#1673: Xbox 360 pad, CachyOS; #1661: GameSir 2 Lite, wired). A real stick rests at the start. */
             /* (a worn stick resting just past a small dead zone counts once it is pushed the other way: it went past its rest) */
+            /* Rest is judged per axis, as before the circle: a phantom axis held past the dead zone keeps its partner
+               outside the circle, and the partner must still rest at its own center. */
             for (int k = 0; k < 4; k++) {
-                const signed char way = (signed char)(v[k] > 0 ? 1 : v[k] < 0 ? -1 : 0);
+                int32_t alone[2];
+                hos_filter_stick((int16_t)v[k], 0, z, alone);
+                const signed char way = (signed char)(alone[0] > 0 ? 1 : alone[0] < 0 ? -1 : 0);
                 if (!way || (pads[i].held[k] && way != pads[i].held[k])) pads[i].rested |= 1u << k;
                 pads[i].held[k] = way;
                 if (!(pads[i].rested >> k & 1)) v[k] = 0;
             }
+            /* An axis held back above no longer counts toward its stick's circle, so its partner's drift stays inside
+               the dead zone. Values are already clamped and the circle keeps them, so this changes nothing otherwise. */
+            hos_filter_stick((int16_t)v[0], (int16_t)v[1], z, v);
+            hos_filter_stick((int16_t)v[2], (int16_t)v[3], z, v + 2);
             /* Camera inversion changes output, not whether the physical stick crossed its rest position. Otherwise
                toggling the setting admits a held phantom axis, which stays admitted after the setting is restored (#2273). */
             if (inv_x) v[2] = -v[2];

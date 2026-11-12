@@ -113,6 +113,8 @@ int main(void) {
         expect(diagonal, -diagonal, z, diagonal, -diagonal);
         expect(-diagonal, -diagonal, z, -diagonal, -diagonal);
         expect(-32768, -32768, z, -32767, -32767);
+        expect(23170, -23170, z, 23170, -23170);   /* (full tilt on a diagonal keeps its whole magnitude) */
+        expect(-32767, 32767, z, -32767, 32767);
     }
     expect(12000, 4000, 0, 12000, 4000);   /* (the smaller component used to be zeroed) */
     expect(2949, 3932, 3, 0, 0);           /* (3-4-5 triangle exactly on the radius 4915) */

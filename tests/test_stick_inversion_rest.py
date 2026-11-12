@@ -1,7 +1,7 @@
 """Compile the real SDL axis pipeline: settings must not admit a held phantom stick (#2273).
 
 Authored device samples exercise inversion, rest/crossing recovery, independent
-devices and every dead zone. No controller, game data or global input is used.
+devices, a phantom axis beside a real one, diagonals and every dead zone. No controller, game data or global input is used.
 """
 import argparse
 from pathlib import Path
@@ -102,6 +102,39 @@ int main(void) {
             for (int k = 0; k < 4; k++) CHECK(output[k] == expected(raw[k], k));
         }
         scenarios++;
+    }
+    for (int zone = 0; zone < 6; zone++) {
+        /* A phantom axis held from connection does not carry its partner's drift past the circle, and the partner
+           still rests at its own center (#1600). */
+        for (int phantom = 0; phantom < 4; phantom++) {
+            const int partner = phantom ^ 1;
+            int16_t raw[4] = {0}; int32_t output[4];
+            memset(pads, 0, sizeof pads); memset(options, 0, sizeof options);
+            options[11] = zone;
+            raw[phantom] = 32767; raw[partner] = (int16_t)(cuts[zone] / 2);
+            poll(0, raw, output);
+            CHECK(output[phantom] == 0 && output[partner] == 0);
+            raw[partner] = (int16_t)(cuts[zone] + 1);
+            poll(0, raw, output);
+            CHECK(output[phantom] == 0 && output[partner] == expected(raw[partner], partner));
+            raw[partner] = (int16_t)(-cuts[zone] / 2);
+            poll(0, raw, output);
+            CHECK(output[partner] == 0);
+            scenarios++;
+        }
+        /* Diagonals keep both components whole: full tilt, and just past the circle while inside it on each axis. */
+        const int16_t tilts[3] = {23170, 32767, (int16_t)(3 * cuts[zone] / 4)};
+        for (int n = 0; n < 3; n++) for (int quadrant = 0; quadrant < 4; quadrant++) {
+            int16_t raw[4] = {0}; int32_t output[4];
+            memset(pads, 0, sizeof pads); memset(options, 0, sizeof options);
+            options[11] = zone;
+            poll(0, raw, output);
+            for (int k = 0; k < 4; k++)
+                raw[k] = (int16_t)(((k & 1) ? quadrant >> 1 : quadrant) & 1 ? -tilts[n] : tilts[n]);
+            poll(0, raw, output);
+            for (int k = 0; k < 4; k++) CHECK(output[k] == expected(raw[k], k));
+            scenarios++;
+        }
     }
     printf("PASS: %u axis/device/rest scenarios; all dead zones and inversion combinations\n", scenarios);
     return 0;
